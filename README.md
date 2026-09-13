@@ -47,7 +47,7 @@ One KV namespace (bound as `STUDY_SPOTS_KV`), everything else is key-prefix conv
 | `suggestion:<ts>-<rand>` | `{name, location, category, description, ts}` | one key per submission |
 | `log:<ts>-<rand>` | `{type, summary, originalMessage, response, ts}` | created when the owner "Responds" in the dashboard |
 | `feedback-throttle:<deviceId>`, `suggest-throttle:<deviceId>` | timestamp string | 30s TTL, guards accidental double-submits |
-| `spot-override:<spotId>` | `{name, address, category, affiliation, tags, description}` | full replacement record, written by the `/dashboard-edit` spot editor |
+| `spot-override:<spotId>` | `{name?, address?, category?, affiliation?, tags?, description?, hours?, hoursApprox?}` | merged record — `/dashboard-edit` owns the first six fields, the separate hours-refresh Worker (`workers/hours-refresh`) owns `hours`/`hoursApprox`; each writes by merging onto whatever the other already stored, not a full replace |
 | `transit-cache:<lat>,<lng>` | `{fetchedAt, routes}` | 60s-fresh cache of a Transit API `nearby_routes` lookup, keyed to ~11m precision; expires from KV after 120s |
 
 Study spot data (name, address, coordinates, tags, description) is seeded from the static, hand-authored `STUDY_SPOTS` in `data.js` — but name/address/category/affiliation/tags/description can be overridden live via `/dashboard-edit` without a redeploy (see below). **Coordinates are never editable through the UI** — a spot's lat/lng always comes from `data.js`; if a location genuinely needs to move, that's a `data.js` + redeploy change.
@@ -88,7 +88,26 @@ Shows three sections: suggested spots, active busyness reports (read-only), and 
 
 ## Spot editor (`/dashboard-edit`)
 
-Same auth/session as `/dashboard` (logging into one logs into both — one cookie, and each page's login form redirects back to wherever you were headed rather than always landing on `/dashboard`). A searchable index of all spots links to a per-spot edit form (name, address, category, affiliation, tags, description). Saving writes a `spot-override:<id>` KV record; a **Reset to original** button (shown only when an override exists) deletes it. Edits take effect immediately — the main site fetches `/api/spots` once on load and merges any overrides into the bundled data before rendering, so there's no rebuild/redeploy step, and the site still works fine on the static data if that fetch ever fails.
+Same auth/session as `/dashboard` (logging into one logs into both — one cookie, and each page's login form redirects back to wherever you were headed rather than always landing on `/dashboard`). A searchable index of all spots links to a per-spot edit form (name, address, category, affiliation, tags, description). Saving merges those six fields onto the spot's `spot-override:<id>` KV record (see the data model table above); a **Reset to original** button (shown only when an override exists) clears just those six fields, leaving any hours cached there by the hours-refresh Worker alone. Edits take effect immediately — the main site fetches `/api/spots` once on load and merges any overrides into the bundled data before rendering, so there's no rebuild/redeploy step, and the site still works fine on the static data if that fetch ever fails.
+
+## Scheduled hours refresh (`workers/hours-refresh`)
+
+A separate, standalone Cloudflare Worker — **not** a Pages Function — because Cloudflare Pages doesn't support Cron Triggers; only Workers do. It runs three times a day at 6am/12pm/6pm **Madison time**, looks up each spot's current hours via the Google Places API, and writes the result into the same `spot-override:<id>` KV records described above (merging, so it never clobbers a `/dashboard-edit` change or vice versa). Since it writes to the same KV namespace `/api/spots` already reads from, a refresh shows up on the live site and app with no redeploy.
+
+The cron fires at both the CDT and CST UTC offsets for each target hour (six firings a day at the platform level); the handler itself checks the real Madison-local hour via `Intl.DateTimeFormat` and no-ops on whichever of each pair doesn't match, so it actually runs exactly 3 times a day year-round without the schedule needing a manual edit every DST change.
+
+**One-time deploy** (requires Node ≥22, same as `npm run dev:full` above, and your own Cloudflare login):
+```bash
+cd workers/hours-refresh
+npx wrangler login                       # if not already
+npx wrangler kv namespace list           # find the STUDY_SPOTS_KV namespace id
+```
+Then edit `wrangler.toml` there, replacing the placeholder `id` under `[[kv_namespaces]]` with that namespace id (the same namespace already bound to the Pages project — do **not** create a new one), and:
+```bash
+npx wrangler secret put GOOGLE_MAPS_API_KEY   # same key value as the Pages project's map key is fine
+npx wrangler deploy
+```
+No further action needed — Cloudflare registers the Cron Triggers on deploy. Re-run `npx wrangler deploy` from this directory any time you change `workers/hours-refresh/src/index.js` (e.g. to adjust which spots are flagged `hoursApprox`).
 
 ## Sorting and directions
 

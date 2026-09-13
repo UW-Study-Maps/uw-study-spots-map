@@ -1,0 +1,22 @@
+name = "uw-study-spots-hours-refresh"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+# Fires at both the CDT (UTC-5) and CST (UTC-6) offsets for 6am/12pm/6pm —
+# Cron Triggers run in UTC with no timezone concept, so this covers Madison's
+# clock changes without needing to edit the schedule every March/November.
+# The handler itself checks the real Madison-local hour and no-ops on
+# whichever of each pair doesn't currently match, so this still runs exactly
+# 3 times a day, not 6 — see src/index.js.
+[triggers]
+crons = ["0 0,11,12,17,18,23 * * *"]
+
+# Same KV namespace the uw-study-spots-map Pages project binds as
+# STUDY_SPOTS_KV (Settings → Functions → KV namespace bindings there) — this
+# worker writes spot-override:<id> records that the site's /api/spots
+# already merges in automatically. Find the namespace's id in the Cloudflare
+# dashboard (Workers & Pages → KV) or via `npx wrangler kv namespace list`,
+# and replace the placeholder below before deploying.
+[[kv_namespaces]]
+binding = "STUDY_SPOTS_KV"
+id = "REPLACE_WITH_STUDY_SPOTS_KV_NAMESPACE_ID"

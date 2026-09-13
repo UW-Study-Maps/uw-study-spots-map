@@ -388,6 +388,28 @@ a{ color: var(--red); }
   border: 1px solid var(--line);
 }
 
+/* ---------- Hours ---------- */
+.hours-approx{
+  font-size:10px; font-weight:600; text-transform:none; letter-spacing:0;
+  color: var(--ink-faint); margin-left:6px;
+}
+.hours-list{
+  background: var(--paper-alt);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 4px 16px;
+  margin-bottom: 20px;
+}
+.hours-row{
+  display:flex; justify-content:space-between; gap:12px;
+  padding:8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size:13px; color: var(--ink-soft);
+}
+.hours-row:last-child{ border-bottom:none; }
+.hours-row-today{ color: var(--ink); font-weight:700; }
+.hours-time{ text-align:right; }
+
 /* ---------- Busyness ---------- */
 .busyness-box{
   background: var(--paper-alt);

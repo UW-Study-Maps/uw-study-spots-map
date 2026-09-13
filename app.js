@@ -518,6 +518,35 @@ import { CATEGORY_META, FILTER_TAGS, STUDY_SPOTS } from "./data.js";
     hideUpdateToast();
   }
 
+  // Google's weekdayDescriptions come Monday-first, so this lines up with
+  // getDay()'s Sunday-first (0-6) return value.
+  function todayIndexMondayFirst() {
+    return (new Date().getDay() + 6) % 7;
+  }
+
+  function hoursHtml(spot) {
+    if (!spot.hours) return "";
+    var today = todayIndexMondayFirst();
+    var rows = spot.hours.map(function (line, i) {
+      var sep = line.indexOf(": ");
+      var day = sep === -1 ? line : line.slice(0, sep);
+      var time = sep === -1 ? "" : line.slice(sep + 2);
+      return (
+        '<div class="hours-row' + (i === today ? " hours-row-today" : "") + '">' +
+        '<span class="hours-day">' + day + "</span>" +
+        '<span class="hours-time">' + time + "</span>" +
+        "</div>"
+      );
+    }).join("");
+    var approxNote = spot.hoursApprox
+      ? '<span class="hours-approx">Building hours — this exact spot may vary</span>'
+      : "";
+    return (
+      '<div class="drawer-section-label">Hours' + approxNote + "</div>" +
+      '<div class="hours-list">' + rows + "</div>"
+    );
+  }
+
   function openDrawer(spot) {
     closeAllOverlays();
     var meta = CATEGORY_META[spot.category];
@@ -537,6 +566,7 @@ import { CATEGORY_META, FILTER_TAGS, STUDY_SPOTS } from "./data.js";
       '<div class="busyness-box" id="busyness-box" data-spot-id="' + spot.id + '">' +
       busynessStatusHtml(null, true) + busynessButtonsHtml(spot.id) +
       "</div>" +
+      hoursHtml(spot) +
       '<div class="drawer-divider"></div>' +
       '<div class="drawer-section-label">About this spot</div>' +
       '<p class="drawer-desc">' + spot.description + "</p>" +

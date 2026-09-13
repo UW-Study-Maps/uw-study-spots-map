@@ -181,7 +181,24 @@ export async function onRequestPost({ request, env }) {
   const intent = String(form.get("intent") || "");
 
   if (intent === "reset") {
-    await env.STUDY_SPOTS_KV.delete(overrideKey(spotId));
+    // Only clear the fields this editor owns — an override can also carry
+    // hours cached by the separate hours-refresh Worker (see workers/
+    // hours-refresh), which "reset" here shouldn't touch.
+    const existingRaw = await env.STUDY_SPOTS_KV.get(overrideKey(spotId));
+    if (existingRaw) {
+      const remaining = JSON.parse(existingRaw);
+      delete remaining.name;
+      delete remaining.address;
+      delete remaining.category;
+      delete remaining.affiliation;
+      delete remaining.tags;
+      delete remaining.description;
+      if (Object.keys(remaining).length > 0) {
+        await env.STUDY_SPOTS_KV.put(overrideKey(spotId), JSON.stringify(remaining));
+      } else {
+        await env.STUDY_SPOTS_KV.delete(overrideKey(spotId));
+      }
+    }
     return new Response(null, { status: 302, headers: { Location: "/dashboard-edit?spot=" + encodeURIComponent(spotId) } });
   }
 
@@ -199,6 +216,14 @@ export async function onRequestPost({ request, env }) {
     return htmlResponse(renderEditForm(attempted, Boolean(overrides[spotId]), { error: result.error }), 400);
   }
 
-  await env.STUDY_SPOTS_KV.put(overrideKey(spotId), JSON.stringify(result.record));
+  // Merge onto any existing override rather than replacing it outright —
+  // an override can also carry hours cached by the separate hours-refresh
+  // Worker (see workers/hours-refresh), which a save here shouldn't erase.
+  const existingRaw = await env.STUDY_SPOTS_KV.get(overrideKey(spotId));
+  const existingRecord = existingRaw ? JSON.parse(existingRaw) : {};
+  await env.STUDY_SPOTS_KV.put(
+    overrideKey(spotId),
+    JSON.stringify(Object.assign({}, existingRecord, result.record))
+  );
   return new Response(null, { status: 302, headers: { Location: "/dashboard-edit?spot=" + encodeURIComponent(spotId) + "&saved=1" } });
 }
